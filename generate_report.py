@@ -286,11 +286,22 @@ def analyze(rows, today):
     att={"Ganado":[],"Perdido":[]}
     for r in rows:
         if r["estatus"] in att and isinstance(r["intentos"],(int,float)): att[r["estatus"]].append(r["intentos"])
-    ig=sum(att["Ganado"])/len(att["Ganado"]) if att["Ganado"] else 0
-    ip=sum(att["Perdido"])/len(att["Perdido"]) if att["Perdido"] else 0
-    r30=risk.get("30+ días",[0,0])[0]
-    P.append(f'<section><div class="sh"><span class="eyebrow g">INSIGHT</span><h2>Ticket promedio: ganado vs perdido</h2></div><p class="sdesc">Los trabajos que se ganan son mucho más chicos que los que se pierden.</p><div class="cmp"><div class="cmp-row"><div class="cmp-lab"><span class="dot dot-g"></span>Ganado <b>·</b> {len(g)}</div><div class="cmp-track"><div class="cmp-fill cmp-g" style="width:{round(gw/max(gw,pw,1)*100)}%">{fmt(gw)}</div></div><div class="cmp-med"></div></div><div class="cmp-row"><div class="cmp-lab"><span class="dot dot-r"></span>Perdido <b>·</b> {len(pl)}</div><div class="cmp-track"><div class="cmp-fill cmp-r" style="width:{round(pw/max(gw,pw,1)*100)}%">{fmt(pw)}</div></div><div class="cmp-med"></div></div></div><p class="takeaway">El estimado perdido promedio vale <b>{round(pw/gw,1) if gw else 0}× más</b> que el ganado. Reforzar el cierre en trabajos de alto valor.</p></section>')
-    P.append(f'<section><div class="sh"><span class="eyebrow g">INSIGHT</span><h2>Persistencia: intentos antes de cerrar</h2></div><p class="sdesc">Los estimados que se ganan recibieron muchos más intentos que los que se perdieron.</p><div class="two-stat"><div class="stat-card stat-g"><div class="stat-n">{ig:.1f}</div><div class="stat-l">intentos promedio<br><b>en los GANADOS</b></div></div><div class="stat-card stat-r"><div class="stat-n">{ip:.1f}</div><div class="stat-l">intentos promedio<br><b>en los PERDIDOS</b></div></div></div><p class="takeaway">Se hacen <b>{ig/ip:.1f}× más intentos</b> en los que se ganan. El manual pide mínimo 3 antes de dar por perdido.</p></section>')
+    ng=len(att["Ganado"]); npd=len(att["Perdido"])
+    ig=sum(att["Ganado"])/ng if ng else 0
+    ip=sum(att["Perdido"])/npd if npd else 0
+    tg=len(ganados); tp=len(perdidos)
+    MIN_MUESTRA=5
+    if ng<MIN_MUESTRA or npd<MIN_MUESTRA:
+        body_pers=(f'<p class="takeaway">Datos insuficientes para concluir: el campo «# de intentos» solo está registrado en <b>{ng} de {tg}</b> estimados ganados y <b>{npd} de {tp}</b> perdidos. Hace falta registrar los intentos (sobre todo en los ganados) para comparar de forma confiable.</p>')
+    else:
+        if ig>ip and ip:
+            tk=f'Se hacen <b>{ig/ip:.1f}× más intentos</b> en los que se ganan. El manual pide mínimo 3 antes de dar por perdido.'
+        elif ig<ip and ig:
+            tk=f'Los ganados se cierran con <b>menos intentos</b> ({ig:.1f} vs {ip:.1f} en los perdidos): suelen cerrar rápido, mientras que los perdidos se persiguen más antes de descartarlos.'
+        else:
+            tk=f'Ganados y perdidos reciben un número de intentos similar ({ig:.1f} vs {ip:.1f}).'
+        body_pers=(f'<div class="two-stat"><div class="stat-card stat-g"><div class="stat-n">{ig:.1f}</div><div class="stat-l">intentos promedio<br><b>en los GANADOS</b><br>(N={ng})</div></div><div class="stat-card stat-r"><div class="stat-n">{ip:.1f}</div><div class="stat-l">intentos promedio<br><b>en los PERDIDOS</b><br>(N={npd})</div></div></div><p class="takeaway">{tk}</p>')
+    P.append(f'<section><div class="sh"><span class="eyebrow g">INSIGHT</span><h2>Persistencia: intentos antes de cerrar</h2></div><p class="sdesc">Promedio de intentos de contacto registrados antes de cerrar (ganar o perder). Solo cuenta estimados con el campo «# de intentos» lleno.</p>{body_pers}</section>')
     alert=f'''<div class="alert"><div class="big">{len(call)}</div><div class="txt"><h2>estimados necesitan llamada hoy</h2><p>Activos con seguimiento vencido o sin contacto hace 3+ días.</p></div><div class="chips"><div class="chip r"><b>{len(venc)}</b><span>contacto vencido</span></div><div class="chip a"><b>{len(tibios)}</b><span>tibios (14+ días)</span></div><div class="chip"><b>{len(activos)}</b><span>activos totales</span></div></div></div>'''
     kpis=f'''<div class="kpis">{kp("Pipeline activo",fmt(pip),f"{len(activos)} estimados abiertos","accent")}{kp("Pipeline ponderado",fmt(pond),"× probabilidad")}{kp("Tasa de cierre",str(round(tasa*100))+"%",f"{len(ganados)} ganados / {n} totales","gold")}{kp("Ticket promedio",fmt(ticket),"por estimado")}</div>'''
     flag=f'''<div class="flag"><b>⚠ Calidad de datos:</b> {len(sin_est)} estimados con cliente pero sin estatus (no entran en el pipeline) · nombres de técnico duplicados por typo.</div>'''
