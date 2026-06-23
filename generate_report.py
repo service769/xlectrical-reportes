@@ -10,7 +10,7 @@ Uso:
 No depende de archivos externos salvo openpyxl y (opcional) el logo PNG.
 """
 import sys, base64, re, os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from collections import defaultdict, Counter
 import openpyxl
 
@@ -161,9 +161,15 @@ def load(path):
             fuente=fuente, motivo=motivo, prox=prox, est=est, csr=csr))
     return rows, lsa
 
-def build(path_xlsx, today=None):
-    today = today or date.today()
-    rows, lsa = load(path_xlsx)
+def bar(pct,cls=""):
+    return f'<div class="barwrap"><div class="bar {cls}" style="width:{max(0,min(100,round(pct)))}%"></div><span>{round(pct)}%</span></div>'
+
+def kp(lab,val,note,cls=""):
+    return f'<div class="kpi {cls}"><div class="lab">{lab}</div><div class="val">{val}</div><div class="note">{note}</div></div>'
+
+def analyze(rows, today):
+    """Genera alert + KPIs + secciones de análisis para un subconjunto de estimados."""
+    P=[]
     def dias(r): return (today-r["ult"]).days if r["ult"] else None
     n=len(rows)
     activos=[r for r in rows if r["estatus"] in ACT]
@@ -285,6 +291,39 @@ def build(path_xlsx, today=None):
     r30=risk.get("30+ días",[0,0])[0]
     P.append(f'<section><div class="sh"><span class="eyebrow g">INSIGHT</span><h2>Ticket promedio: ganado vs perdido</h2></div><p class="sdesc">Los trabajos que se ganan son mucho más chicos que los que se pierden.</p><div class="cmp"><div class="cmp-row"><div class="cmp-lab"><span class="dot dot-g"></span>Ganado <b>·</b> {len(g)}</div><div class="cmp-track"><div class="cmp-fill cmp-g" style="width:{round(gw/max(gw,pw,1)*100)}%">{fmt(gw)}</div></div><div class="cmp-med"></div></div><div class="cmp-row"><div class="cmp-lab"><span class="dot dot-r"></span>Perdido <b>·</b> {len(pl)}</div><div class="cmp-track"><div class="cmp-fill cmp-r" style="width:{round(pw/max(gw,pw,1)*100)}%">{fmt(pw)}</div></div><div class="cmp-med"></div></div></div><p class="takeaway">El estimado perdido promedio vale <b>{round(pw/gw,1) if gw else 0}× más</b> que el ganado. Reforzar el cierre en trabajos de alto valor.</p></section>')
     P.append(f'<section><div class="sh"><span class="eyebrow g">INSIGHT</span><h2>Persistencia: intentos antes de cerrar</h2></div><p class="sdesc">Los estimados que se ganan recibieron muchos más intentos que los que se perdieron.</p><div class="two-stat"><div class="stat-card stat-g"><div class="stat-n">{ig:.1f}</div><div class="stat-l">intentos promedio<br><b>en los GANADOS</b></div></div><div class="stat-card stat-r"><div class="stat-n">{ip:.1f}</div><div class="stat-l">intentos promedio<br><b>en los PERDIDOS</b></div></div></div><p class="takeaway">Se hacen <b>{ig/ip:.1f}× más intentos</b> en los que se ganan. El manual pide mínimo 3 antes de dar por perdido.</p></section>')
+    alert=f'''<div class="alert"><div class="big">{len(call)}</div><div class="txt"><h2>estimados necesitan llamada hoy</h2><p>Activos con seguimiento vencido o sin contacto hace 3+ días.</p></div><div class="chips"><div class="chip r"><b>{len(venc)}</b><span>contacto vencido</span></div><div class="chip a"><b>{len(tibios)}</b><span>tibios (14+ días)</span></div><div class="chip"><b>{len(activos)}</b><span>activos totales</span></div></div></div>'''
+    kpis=f'''<div class="kpis">{kp("Pipeline activo",fmt(pip),f"{len(activos)} estimados abiertos","accent")}{kp("Pipeline ponderado",fmt(pond),"× probabilidad")}{kp("Tasa de cierre",str(round(tasa*100))+"%",f"{len(ganados)} ganados / {n} totales","gold")}{kp("Ticket promedio",fmt(ticket),"por estimado")}</div>'''
+    flag=f'''<div class="flag"><b>⚠ Calidad de datos:</b> {len(sin_est)} estimados con cliente pero sin estatus (no entran en el pipeline) · nombres de técnico duplicados por typo.</div>'''
+    return alert + kpis + ''.join(P) + flag
+
+def build(path_xlsx, today=None):
+    today = today or date.today()
+    rows, lsa = load(path_xlsx)
+    n=len(rows)
+    meses={1:"enero",2:"febrero",3:"marzo",4:"abril",5:"mayo",6:"junio",7:"julio",8:"agosto",9:"septiembre",10:"octubre",11:"noviembre",12:"diciembre"}
+    fecha=f"{today.day} de {meses[today.month]} de {today.year}"
+    # --- Dos alcances: todos los estimados y los creados en los últimos 30 días ---
+    desde30 = today - timedelta(days=30)
+    rows30 = [r for r in rows if r['fecha_est'] and desde30 <= r['fecha_est'] <= today]
+    pane_all = analyze(rows, today)
+    pane_30  = analyze(rows30, today)
+    note_all = f'<p class="scope-note">Análisis sobre los <b>{n}</b> estimados del tracker (histórico completo).</p>'
+    note_30  = f'<p class="scope-note">Análisis sobre los <b>{len(rows30)}</b> estimados creados en los últimos 30 días (desde el {desde30.day}/{desde30.month}).</p>'
+    tabs = (
+        '<div class="tabs">'
+        '<button class="tab-btn active" data-t="all">Todos los estimados</button>'
+        '<button class="tab-btn" data-t="r30">Últimos 30 días</button>'
+        '</div>'
+        f'<div class="tab-pane" id="pane-all">{note_all}{pane_all}</div>'
+        f'<div class="tab-pane hidden" id="pane-r30">{note_30}{pane_30}</div>'
+    )
+    tab_js = ("<script>document.querySelectorAll('.tab-btn').forEach(function(b){"
+        "b.addEventListener('click',function(){"
+        "document.querySelectorAll('.tab-btn').forEach(function(x){x.classList.remove('active');});"
+        "b.classList.add('active');"
+        "document.getElementById('pane-all').classList.toggle('hidden', b.dataset.t!=='all');"
+        "document.getElementById('pane-r30').classList.toggle('hidden', b.dataset.t!=='r30');"
+        "});});</script>")
 
     # Leads sin agendar
     by_est=Counter(l["est"] for l in lsa if l["est"])
@@ -308,13 +347,10 @@ def build(path_xlsx, today=None):
     logo_html = (f'<div class="logo-box"><img src="data:image/png;base64,{LOGO_B64}" alt="Xlectrical"></div>'
                  if LOGO_B64 else '<div class="logo">XL</div>')
     header=f'''<header><div class="hin"><div class="brand">{logo_html}<div><h1>Seguimiento de Estimados</h1><p>Xlectrical LLC · Pipeline de ventas</p></div></div><div class="date">Informe diario<b>{fecha}</b></div></div></header>'''
-    alert=f'''<div class="alert"><div class="big">{len(call)}</div><div class="txt"><h2>estimados necesitan llamada hoy</h2><p>Activos con seguimiento vencido o sin contacto hace 3+ días.</p></div><div class="chips"><div class="chip r"><b>{len(venc)}</b><span>contacto vencido</span></div><div class="chip a"><b>{len(tibios)}</b><span>tibios (14+ días)</span></div><div class="chip"><b>{len(activos)}</b><span>activos totales</span></div></div></div>'''
-    kpis=f'''<div class="kpis">{kp("Pipeline activo",fmt(pip),f"{len(activos)} estimados abiertos","accent")}{kp("Pipeline ponderado",fmt(pond),"× probabilidad")}{kp("Tasa de cierre",str(round(tasa*100))+"%",f"{len(ganados)} ganados / {n} totales","gold")}{kp("Ticket promedio",fmt(ticket),"por estimado")}</div>'''
-    flag=f'''<div class="flag"><b>⚠ Calidad de datos:</b> {len(sin_est)} estimados con cliente pero sin estatus (no entran en el pipeline) · nombres de técnico duplicados por typo.</div>'''
     footer=f'''<footer>Vista para socios · Datos de contacto enmascarados por privacidad<br>Generado automáticamente · {fecha} · {n} estimados · Xlectrical LLC</footer>'''
-
     EXTRA_CSS=".logo-box{background:#fff;border-radius:10px;padding:7px 12px;display:inline-block;line-height:0;box-shadow:0 4px 14px rgba(0,0,0,.18)}.logo-box img{height:34px;width:auto;display:block}"
-    body=header+'<div class="wrap">'+alert+kpis+"".join(P)+leads+flag+footer+'</div>'
+    EXTRA_CSS += ".tabs{display:flex;gap:8px;margin:22px 0 16px;flex-wrap:wrap}.tab-btn{cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--muted);font-weight:700;font-size:13.5px;padding:10px 18px;border-radius:10px;font-family:inherit}.tab-btn.active{background:var(--pur);color:#fff;border-color:var(--pur)}.tab-btn:hover{border-color:var(--pur-br)}.hidden{display:none}.scope-note{font-size:12.5px;color:var(--muted);margin:0 0 12px}"
+    body=header+'<div class="wrap">'+tabs+tab_js+leads+footer+'</div>'
     html=f'''<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Seguimiento de Estimados — Xlectrical</title><style>{CSS}{EXTRA_CSS}</style></head><body>{body}</body></html>'''
     return html
 
