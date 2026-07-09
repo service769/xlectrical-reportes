@@ -223,11 +223,18 @@ def analyze(rows, today):
         elif s=="Perdido": tec[t]["p"]+=1
         elif s=="Descartado": tec[t]["d"]+=1
         elif s in ACT: tec[t]["act"]+=1
-    tr=""
-    for t in ["Jesus Cardenas","James Walker","Romario Taffe","David Sierra","Jusel Claro","Otros / sin asignar"]:
+    activos=["Jesus Cardenas","Romario Taffe","David Sierra","Jusel Claro","Otros / sin asignar"]
+    inactivos=["James Walker"]  # ex-tecnicos: fuera de la comparacion activa, pero sus estimados se siguen contabilizando
+    def _techrow(t, label=None):
         v=tec[t]; tot=v["g"]+v["p"]+v["d"]+v["act"]; cerr=v["g"]+v["p"]+v["d"]
         tt=v["g"]/tot*100 if tot else 0; tp=v["g"]/cerr*100 if cerr else 0
-        tr+=f'<tr><td class="cli">{t}</td><td class="num">{v["g"]}</td><td class="num">{v["p"]}</td><td class="num">{v["act"]}</td><td class="num">{fmt(v["mg"])}</td><td>{bar(tt)}</td><td>{bar(tp,"bar-gold")}</td></tr>'
+        nm=label or t
+        return f'<tr><td class="cli">{nm}</td><td class="num">{v["g"]}</td><td class="num">{v["p"]}</td><td class="num">{v["act"]}</td><td class="num">{fmt(v["mg"])}</td><td>{bar(tt)}</td><td>{bar(tp,"bar-gold")}</td></tr>'
+    tr="".join(_techrow(t) for t in activos)
+    _inact=[t for t in inactivos if (tec[t]["g"]+tec[t]["p"]+tec[t]["d"]+tec[t]["act"])>0]
+    if _inact:
+        tr+='<tr><td colspan="7" style="padding:7px 10px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);background:var(--bg)">Inactivos (histórico)</td></tr>'
+        tr+="".join(_techrow(t, t+" (inactivo)") for t in _inact)
     P.append(f'<section><div class="sh"><h2>Cierre por técnico</h2></div><p class="sdesc">Cierre total (÷ todos sus estimados) vs cierre puro (÷ solo los cerrados).</p><table><thead><tr><th>Técnico</th><th class="num">G</th><th class="num">P</th><th class="num">Act.</th><th class="num">$ Ganado</th><th>Cierre total</th><th>Cierre puro</th></tr></thead><tbody>{tr}</tbody></table></section>')
 
     # Fuente
