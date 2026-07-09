@@ -217,14 +217,14 @@ def analyze(rows, today):
     norm={"James Walkers":"James Walker"}; tec=defaultdict(lambda:{"g":0,"p":0,"d":0,"act":0,"mg":0})
     for r in rows:
         t=norm.get(r["tecnico"], r["tecnico"] or "Sin asignar")
-        if t not in ("James Walker","Romario Taffe","Jesus Cardenas","David Sierra"): t="Otros / sin asignar"
+        if t not in ("James Walker","Romario Taffe","Jesus Cardenas","David Sierra","Jusel Claro"): t="Otros / sin asignar"
         s=r["estatus"]
         if s=="Ganado": tec[t]["g"]+=1; tec[t]["mg"]+=r["monto"]
         elif s=="Perdido": tec[t]["p"]+=1
         elif s=="Descartado": tec[t]["d"]+=1
         elif s in ACT: tec[t]["act"]+=1
     tr=""
-    for t in ["Jesus Cardenas","James Walker","Romario Taffe","David Sierra","Otros / sin asignar"]:
+    for t in ["Jesus Cardenas","James Walker","Romario Taffe","David Sierra","Jusel Claro","Otros / sin asignar"]:
         v=tec[t]; tot=v["g"]+v["p"]+v["d"]+v["act"]; cerr=v["g"]+v["p"]+v["d"]
         tt=v["g"]/tot*100 if tot else 0; tp=v["g"]/cerr*100 if cerr else 0
         tr+=f'<tr><td class="cli">{t}</td><td class="num">{v["g"]}</td><td class="num">{v["p"]}</td><td class="num">{v["act"]}</td><td class="num">{fmt(v["mg"])}</td><td>{bar(tt)}</td><td>{bar(tp,"bar-gold")}</td></tr>'
