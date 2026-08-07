@@ -214,24 +214,35 @@ def analyze(rows, today):
     P.append(f'<section><div class="sh"><span class="eyebrow">RIESGO $</span><h2>Pipeline en riesgo por antigüedad</h2></div><p class="sdesc">Cuánto dinero lleva sin contacto. Lo de 30+ días está por enfriarse.</p><table><thead><tr><th>Días sin contacto</th><th class="num"># est.</th><th class="num">$ en riesgo</th><th>Monto</th></tr></thead><tbody>{rr}</tbody></table></section>')
 
     # Técnico (total + puro)
-    norm={"James Walkers":"James Walker"}; tec=defaultdict(lambda:{"g":0,"p":0,"d":0,"act":0,"mg":0})
+    # --- Atribucion de tecnico (lista dinamica: se arma sola desde los datos) ---
+    # Para dar de baja a un ex-tecnico, agrega su nombre a INACTIVOS.
+    # Agregar un tecnico/vendedor NUEVO no requiere tocar el codigo: aparece solo.
+    INACTIVOS=["James Walker"]
+    # Alias para typos o nombres parciales -> nombre canonico:
+    ALIAS={"James Walkers":"James Walker","David":"David Sierra"}
+    def norm_tec(raw):
+        t=(raw or "").strip()
+        if not t: return "Otros / sin asignar"
+        t=t.split(" - ")[0].strip()   # estimados compartidos "A - B": se atribuyen al PRIMER tecnico
+        return ALIAS.get(t,t)
+    tec=defaultdict(lambda:{"g":0,"p":0,"d":0,"act":0,"mg":0})
     for r in rows:
-        t=norm.get(r["tecnico"], r["tecnico"] or "Sin asignar")
-        if t not in ("James Walker","Romario Taffe","Jesus Cardenas","David Sierra","Jusel Claro"): t="Otros / sin asignar"
+        t=norm_tec(r["tecnico"])
         s=r["estatus"]
         if s=="Ganado": tec[t]["g"]+=1; tec[t]["mg"]+=r["monto"]
         elif s=="Perdido": tec[t]["p"]+=1
         elif s=="Descartado": tec[t]["d"]+=1
         elif s in ACT: tec[t]["act"]+=1
-    activos=["Jesus Cardenas","Romario Taffe","David Sierra","Jusel Claro","Otros / sin asignar"]
-    inactivos=["James Walker"]  # ex-tecnicos: fuera de la comparacion activa, pero sus estimados se siguen contabilizando
+    _tot=lambda t: tec[t]["g"]+tec[t]["p"]+tec[t]["d"]+tec[t]["act"]
+    tecnicos=[t for t in tec if _tot(t)>0 and t not in INACTIVOS]
+    tecnicos.sort(key=lambda t:(t=="Otros / sin asignar", -tec[t]["mg"], -_tot(t)))
     def _techrow(t, label=None):
         v=tec[t]; tot=v["g"]+v["p"]+v["d"]+v["act"]; cerr=v["g"]+v["p"]+v["d"]
         tt=v["g"]/tot*100 if tot else 0; tp=v["g"]/cerr*100 if cerr else 0
         nm=label or t
         return f'<tr><td class="cli">{nm}</td><td class="num">{v["g"]}</td><td class="num">{v["p"]}</td><td class="num">{v["act"]}</td><td class="num">{fmt(v["mg"])}</td><td>{bar(tt)}</td><td>{bar(tp,"bar-gold")}</td></tr>'
-    tr="".join(_techrow(t) for t in activos)
-    _inact=[t for t in inactivos if (tec[t]["g"]+tec[t]["p"]+tec[t]["d"]+tec[t]["act"])>0]
+    tr="".join(_techrow(t) for t in tecnicos)
+    _inact=[t for t in INACTIVOS if _tot(t)>0]
     if _inact:
         tr+='<tr><td colspan="7" style="padding:7px 10px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);background:var(--bg)">Inactivos (histórico)</td></tr>'
         tr+="".join(_techrow(t, t+" (inactivo)") for t in _inact)
