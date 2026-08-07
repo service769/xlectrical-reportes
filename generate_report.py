@@ -217,7 +217,7 @@ def analyze(rows, today):
     # --- Atribucion de tecnico (lista dinamica: se arma sola desde los datos) ---
     # Para dar de baja a un ex-tecnico, agrega su nombre a INACTIVOS.
     # Agregar un tecnico/vendedor NUEVO no requiere tocar el codigo: aparece solo.
-    INACTIVOS=["James Walker"]
+    INACTIVOS=["James Walker","Jesus Cardenas"]
     # Alias para typos o nombres parciales -> nombre canonico:
     ALIAS={"James Walkers":"James Walker","David":"David Sierra"}
     def norm_tec(raw):
